@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gyvatėlė: Šaudyk į Sienas!</title>
+    <style>
+        body {
+            background-color: #1e1e2e;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        h1 {
+            margin-bottom: 5px;
+            font-size: 24px;
+        }
+        #status-board {
+            display: flex;
+            gap: 15px;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        canvas {
+            border: 4px solid #89b4fa;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: #11111b;
+        }
+        .instructions {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #a6adc8;
+            text-align: center;
+        }
+        #artifacts {
+            margin-top: 5px;
+            font-size: 14px;
+            color: #f9e2af;
+            min-height: 20px;
+            text-align: center;
+            max-width: 400px;
+        }
+        #powerup-status {
+            margin-top: 5px;
+            font-size: 14px;
+            color: #f38ba8;
+            height: 20px;
+            font-weight: bold;
+        }
+        #highscore-board {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #fab387;
+            background: #313244;
+            padding: 5px 15px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🐍 Gyvatėlė: Šaudyk į Sienas!</h1>
+    <div id="status-board">
+        <div>Taškai: <span id="score">0</span></div>
+        <div>Lygis: <span id="level">1</span></div>
+        <div>Laikas: <span id="timer">00:00</span></div>
+    </div>
+    <div id="artifacts">Artefaktai: <i>Dar neturi</i></div>
+    <div id="powerup-status"></div>
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    <div id="highscore-board">Geriausias rezultatas: <span id="highScore">0</span> taškų</div>
+    <div class="instructions">Valdyk rodyklėmis ⬆️ ⬇️ ⬅️ ➡️ | <b>SPACEBAR</b> – šauti (kai surenki ⚡)</div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreElement = document.getElementById("score");
+        const levelElement = document.getElementById("level");
+        const timerElement = document.getElementById("timer");
+        const artifactsElement = document.getElementById("artifacts");
+        const highScoreElement = document.getElementById("highScore");
+        const powerupStatusElement = document.getElementById("powerup-status");
+
+        const gridSize = 20;
+        const tileCount = canvas.width / gridSize;
+
+        let snake = [{ x: 10, y: 10 }];
+        let food = { x: 15, y: 15 };
+        let powerUp = null;
+        let bullets = [];
+        let obstacles = [];
+        
+        let dx = 0;
+        let dy = 0;
+        let score = 0;
+        let level = 1;
+        let gameSpeed = 100;
+        let gameLoop;
+        let gameStarted = false;
+
+        let hasGun = false;
+        let gunTimer = null;
+        let gunTimeLeft = 0;
+
+        let secondsElapsed = 0;
+        let timerInterval = null;
+
+        let highScore = localStorage.getItem("snakeGunHighScore") || 0;
+        highScoreElement.innerText = highScore;
+        
+        const artifactsList = [
+            "✨ Senovinis Kompasas", 
+            "🔮 Kristalinis Rutulys", 
+            "📜 Magiškas Perkamentas", 
+            "🛡️ Drakono Amuletas", 
+            "👑 Karališkoji Karūna"
+        ];
+        let collectedArtifacts = [];
+
+        document.addEventListener("keydown", handleKeyPress);
+
+        function main() {
+            if (hasGameEnded()) {
+                stopTimer();
+                checkHighScore();
+                alert(`Žaidimas baigtas! Surinkai ${score} taškų per ${formatTime(secondsElapsed)}.`);
+                resetGame();
+                return;
+            }
+
+            clearCanvas();
+            drawObstacles();
+            drawFood();
+            drawPowerUp();
+            drawBullets();
+            moveBullets();
+            moveSnake();
+            drawSnake();
+        }
+
+        function clearCanvas() {
+            ctx.fillStyle = "#11111b";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function drawSnake() {
+            snake.forEach((part, index) => {
+                if (index === 0) {
+                    ctx.fillStyle = hasGun ? "#f9e2af" : "#40a02b";
+                } else {
+                    ctx.fillStyle = "#a6e3a1";
+                }
+                ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize - 2, gridSize - 2);
+            });
+        }
+
+        function drawObstacles() {
+            ctx.fillStyle = "#f38ba8";
+            obstacles.forEach(obs => {
+                ctx.fillRect(obs.x * gridSize, obs.y * gridSize, gridSize - 2, gridSize - 2);
+            });
+        }
+
+        function drawFood() {
+            ctx.fillStyle = "#fab387";
+            ctx.beginPath();
+            ctx.arc(food.x * gridSize + gridSize / 2, food.y * gridSize + gridSize / 2, gridSize / 2 - 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawPowerUp() {
+            if (powerUp) {
+                ctx.fillStyle = "#f9e2af";
+                ctx.beginPath();
+                ctx.arc(powerUp.x * gridSize + gridSize / 2, powerUp.y * gridSize + gridSize / 2, gridSize / 2 - 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = "#11111b";
+                ctx.font = "12px Arial";
+                ctx.fillText("⚡", powerUp.x * gridSize + 4, powerUp.y * gridSize + 15);
+            }
+        }
+
+        function drawBullets() {
+            ctx.fillStyle = "#fab387";
+            bullets.forEach(b => {
+                ctx.fillRect(b.x * gridSize + 6, b.y * gridSize + 6, 8, 8);
+            });
+        }
+
+        function moveBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].x += bullets[i].dx;
+                bullets[i].y += bullets[i].dy;
+
+                if (bullets[i].x < 0 || bullets[i].x >= tileCount || bullets[i].y < 0 || bullets[i].y >= tileCount) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+
+                let hitObstacleIndex = obstacles.findIndex(obs => obs.x === bullets[i].x && obs.y === bullets[i].y);
+                if (hitObstacleIndex !== -1) {
+                    obstacles.splice(hitObstacleIndex, 1);
+                    bullets.splice(i, 1);
+                }
+            }
+        }
+
+        function moveSnake() {
+            const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+            if (head.x < 0) head.x = tileCount - 1;
+            if (head.x >= tileCount) head.x = 0;
+            if (head.y < 0) head.y = tileCount - 1;
+            if (head.y >= tileCount) head.y = 0;
+
+            snake.unshift(head);
+
+            if (snake[0].x === food.x && snake[0].y === food.y) {
+                score += 10;
+                scoreElement.innerText = score;
+                checkLevelUp();
+                generateFood();
+            } else {
+                if (powerUp && snake[0].x === powerUp.x && snake[0].y === powerUp.y) {
+                    activateGun();
+                    powerUp = null;
+                    snake.pop();
+                } else {
+                    snake.pop();
+                }
+            }
+        }
+
+        function activateGun() {
+            hasGun = true;
+            gunTimeLeft = 10;
+            powerupStatusElement.innerText = `⚡ Ginklas aktyvus! Liko ${gunTimeLeft}s (Spausk SPACE)`;
+            
+            if (gunTimer) clearInterval(gunTimer);
+            gunTimer = setInterval(() => {
+                gunTimeLeft--;
+                if (gunTimeLeft > 0) {
+                    powerupStatusElement.innerText = `⚡ Ginklas aktyvus! Liko ${gunTimeLeft}s (Spausk SPACE)`;
+                } else {
+                    hasGun = false;
+                    powerupStatusElement.innerText = "";
+                    clearInterval(gunTimer);
+                }
+            }, 1000);
+        }
+
+        function checkLevelUp() {
+            let newLevel = Math.floor(score / 50) + 1;
+            if (newLevel > level) {
+                level = newLevel;
+                levelElement.innerText = level;
+                
+                let artifactIndex = (level - 2) % artifactsList.length;
+                let wonArtifact = artifactsList[artifactIndex];
+                collectedArtifacts.push(wonArtifact);
+                artifactsElement.innerHTML = `Artefaktai: <b>${collectedArtifacts.join(", ")}</b>`;
+
+                generateObstacles();
+
+                if (level > 1 && Math.random() < 0.7 && !powerUp) {
+                    generatePowerUp();
+                }
+
+                clearInterval(gameLoop);
+                gameSpeed = Math.max(50, gameSpeed - 10);
+                gameLoop = setInterval(main, gameSpeed);
+            }
+        }
+
+        function generateObstacles() {
+            obstacles = [];
+            let obstacleCount = (level - 1) * 3;
+            
+            for (let i = 0; i < obstacleCount; i++) {
+                let obsX = Math.floor(Math.random() * tileCount);
+                let obsY = Math.floor(Math.random() * tileCount);
+                
+                if ((obsX === 10 && obsY === 10) || (obsX === food.x && obsY === food.y)) {
+                    i--;
+                    continue;
+                }
+                obstacles.push({ x: obsX, y: obsY });
+            }
+        }
+
+        function generateFood() {
+            food.x = Math.floor(Math.random() * tileCount);
+            food.y = Math.floor(Math.random() * tileCount);
+            
+            let collision = snake.some(part => part.x === food.x && part.y === food.y) ||
+                            obstacles.some(obs => obs.x === food.x && obs.y === food.y);
+            if (collision) {
+                generateFood();
+            }
+        }
+
+        function generatePowerUp() {
+            powerUp = {
+                x: Math.floor(Math.random() * tileCount),
+                y: Math.floor(Math.random() * tileCount)
+            };
+            let collision = snake.some(part => part.x === powerUp.x && part.y === powerUp.y) ||
+                            obstacles.some(obs => obs.x === powerUp.x && obs.y === powerUp.y) ||
+                            (food.x === powerUp.x && food.y === powerUp.y);
+            if (collision) {
+                generatePowerUp();
+            }
+        }
+
+        function handleKeyPress(event) {
+            const LEFT = 37, UP = 38, RIGHT = 39, DOWN = 40, SPACE = 32;
+            const keyPressed = event.keyCode;
+
+            const goingUp = dy === -1;
+            const goingDown = dy === 1;
+            const goingRight = dx === 1;
+            const goingLeft = dx === -1;
+
+            if (!gameStarted && (keyPressed === LEFT || keyPressed === UP || keyPressed === RIGHT || keyPressed === DOWN)) {
+                gameStarted = true;
+                gameLoop = setInterval(main, gameSpeed);
+                startTimer();
+                if (level > 1 && !powerUp) generatePowerUp();
+            }
+
+            if (keyPressed === LEFT && !goingRight) { dx = -1; dy = 0; }
+            if (keyPressed === UP && !goingDown) { dx = 0; dy = -1; }
+            if (keyPressed === RIGHT && !goingLeft) { dx = 1; dy = 0; }
+            if (keyPressed === DOWN && !goingUp) { dx = 0; dy = 1; }
+
+            if (keyPressed === SPACE && hasGun && (dx !== 0 || dy !== 0)) {
+                bullets.push({
+                    x: snake[0].x,
+                    y: snake[0].y,
+                    dx: dx,
+                    dy: dy
+                });
+            }
+        }
+
+        function hasGameEnded() {
+            for (let i = 1; i < snake.length; i++) {
+                if (snake[i].x === snake[0].x && snake[i].y === snake[0].y) return true;
+            }
+
+            for (let i = 0; i < obstacles.length; i++) {
+                if (obstacles[i].x === snake[0].x && obstacles[i].y === snake[0].y) return true;
+            }
+
+            return false;
+        }
+
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                secondsElapsed++;
+                timerElement.innerText = formatTime(secondsElapsed);
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+            if (gunTimer) clearInterval(gunTimer);
+        }
+
+        function formatTime(totalSeconds) {
+            let minutes = Math.floor(totalSeconds / 60);
+            let seconds = totalSeconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function checkHighScore() {
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem("snakeGunHighScore", highScore);
+                highScoreElement.innerText = highScore;
+            }
+        }
+
+        function resetGame() {
+            clearInterval(gameLoop);
+            stopTimer();
+            snake = [{ x: 10, y: 10 }];
+            food = { x: 15, y: 15 };
+            powerUp = null;
+            bullets = [];
+            obstacles = [];
+            dx = 0;
+            dy = 0;
+            score = 0;
+            level = 1;
+            gameSpeed = 100;
+            secondsElapsed = 0;
+            hasGun = false;
+            collectedArtifacts = [];
+            
+            scoreElement.innerText = score;
+            levelElement.innerText = level;
+            timerElement.innerText = "00:00";
+            powerupStatusElement.innerText = "";
+            artifactsElement.innerHTML = "Artefaktai: <i>Dar neturi</i>";
+            gameStarted = false;
+            
+            clearCanvas();
+            drawSnake();
+            drawFood();
+        }
+
+        clearCanvas();
+        drawSnake();
+        drawFood();
+    </script>
+</body>
+</html>
