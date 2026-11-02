@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atminties Žaidimas – 8 Lygiai su Parduotuve</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            background-color: #181825;
+            color: #cdd6f4;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px 10px;
+            /* Sklandus fono spalvos keitimasis */
+            transition: background-color 0.8s ease;
+        }
+        h1 {
+            margin: 0 0 10px 0;
+            color: #89b4fa;
+            font-size: 24px;
+            text-align: center;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .info {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 12px;
+            font-size: 15px;
+            color: #a6adc8;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 18px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .shop-container {
+            margin-bottom: 15px;
+            background: rgba(49, 50, 68, 0.7);
+            padding: 10px 18px;
+            border-radius: 12px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .shop-btn {
+            background: linear-gradient(135deg, #f9e2af, #fab387);
+            color: #181825;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, filter 0.2s;
+        }
+        .shop-btn:hover {
+            filter: brightness(1.1);
+            transform: translateY(-2px);
+        }
+        .grid {
+            display: grid;
+            grid-gap: 10px;
+            justify-content: center;
+            max-width: 95vw;
+            margin: 10px auto;
+        }
+        .card {
+            width: 55px;
+            height: 55px;
+            background-color: rgba(49, 50, 68, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            user-select: none;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.3s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .card:hover {
+            background-color: rgba(69, 71, 90, 0.9);
+            transform: scale(1.05);
+        }
+        .card.flipped {
+            background-color: #45475a;
+            transform: rotateY(180deg) scale(1.05);
+        }
+        .card.matched {
+            background-color: #a6e3a1;
+            cursor: default;
+            transform: scale(1);
+            box-shadow: 0 0 12px rgba(166, 227, 161, 0.5);
+        }
+        button.main-btn {
+            margin-top: 15px;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #89b4fa, #b4befe);
+            color: #181825;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s, filter 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        button.main-btn:hover {
+            filter: brightness(1.1);
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🧠 Atminties Žaidimas (8 Lygiai)</h1>
+    
+    <div class="info">
+        <div>Lygis: <strong id="level">1</strong> / 8</div>
+        <div>Taškai: <strong id="score">50</strong></div>
+        <div>Ėjimai: <strong id="moves">0</strong></div>
+    </div>
+
+    <!-- Parduotuvė -->
+    <div class="shop-container">
+        <span>🛒 Parduotuvė:</span>
+        <button class="shop-btn" id="buyPeekBtn">⚡ Super Atvertimas 3 vnt. (-40 tšk.)</button>
+        <span id="shop-status" style="font-size: 13px; color: #a6e3a1; font-weight: bold;"></span>
+    </div>
+    
+    <div class="grid" id="gameGrid"></div>
+    
+    <button class="main-btn" id="restartBtn">Pradėti iš naujo</button>
+
+    <script>
+        // Emojų sąrašas
+        const allEmojis = [
+            '🍎', '🍌', '🍇', '🍉', '🍓', '🍒', '🍍', '🥝', 
+            '🥑', '🍋', '🥥', '🍑', '🍔', '🍕', '🌮', '🍿', 
+            '🍩', '🍪', '🍫', '🍬', '🍭', '🧊', '☕', '🧃'
+        ];
+        
+        // Fono spalvų paletė (keičiasi atspėjus porą)
+        const bgColors = [
+            '#181825', '#1e1b4b', '#14532d', '#701a75', 
+            '#7c2d12', '#0f766e', '#312e81', '#581c87', 
+            '#881337', '#1e3a8a', '#2d1b2d', '#1b3a2a'
+        ];
+        let colorIndex = 0;
+
+        let currentLevel = 1;
+        let score = 50; 
+        let cardsArray = [];
+        let flippedCards = [];
+        let matchedPairs = 0;
+        let moves = 0;
+        let lockBoard = false;
+        let superPeekActive = false;
+
+        // DOM Elementai
+        const gameGrid = document.getElementById("gameGrid");
+        const movesElement = document.getElementById("moves");
+        const levelElement = document.getElementById("level");
+        const scoreElement = document.getElementById("score");
+        const shopStatusElement = document.getElementById("shop-status");
+
+        // Funkcija fono spalvai pakeisti su perėjimu
+        function changeBackgroundColor() {
+            colorIndex = (colorIndex + 1) % bgColors.length;
+            document.body.style.backgroundColor = bgColors[colorIndex];
+        }
+
+        // Lygio inicializavimas
+        function initLevel() {
+            levelElement.innerText = currentLevel;
+            moves = 0;
+            movesElement.innerText = moves;
+            matchedPairs = 0;
+            flippedCards = [];
+            lockBoard = false;
+            superPeekActive = false;
+            shopStatusElement.innerText = "";
+            
+            // Atstatome pradinę fono spalvą
+            document.body.style.backgroundColor = bgColors[0];
+            colorIndex = 0;
+
+            let pairCount = 6;
+            let cols = 4;
+
+            if (currentLevel === 1) { pairCount = 6; cols = 4; }
+            else if (currentLevel === 2) { pairCount = 8; cols = 4; }
+            else if (currentLevel === 3) { pairCount = 10; cols = 5; }
+            else if (currentLevel === 4) { pairCount = 12; cols = 6; }
+            else if (currentLevel === 5) { pairCount = 14; cols = 7; }
+            else if (currentLevel === 6) { pairCount = 16; cols = 8; }
+            else if (currentLevel === 7) { pairCount = 18; cols = 6; }
+            else if (currentLevel === 8) { pairCount = 20; cols = 8; }
+
+            let selectedEmojis = allEmojis.slice(0, pairCount);
+            cardsArray = [...selectedEmojis, ...selectedEmojis];
+            gameGrid.style.gridTemplateColumns = `repeat(${cols}, 55px)`;
+
+            createBoard();
+        }
+
+        function shuffle() {
+            cardsArray.sort(() => Math.random() - 0.5);
+        }
+
+        function createBoard() {
+            gameGrid.innerHTML = "";
+            shuffle();
+            cardsArray.forEach((emoji, index) => {
+                const card = document.createElement("div");
+                card.classList.add("card");
+                card.dataset.emoji = emoji;
+                card.dataset.index = index;
+                card.addEventListener("click", flipCard);
+                gameGrid.appendChild(card);
+            });
+        }
+
+        function buySuperPeek() {
+            if (score >= 40) {
+                if (!superPeekActive) {
+                    score -= 40;
+                    scoreElement.innerText = score;
+                    superPeekActive = true;
+                    shopStatusElement.innerText = "⚡ Super atvertimas aktyvus! Gali atversti 3 korteles!";
+                } else {
+                    shopStatusElement.innerText = "⚠️ Jau turi aktyvų super atvertimą!";
+                    setTimeout(() => { shopStatusElement.innerText = ""; }, 2000);
+                }
+            } else {
+                shopStatusElement.innerText = "❌ Per mažai taškų!";
+                setTimeout(() => { shopStatusElement.innerText = ""; }, 2000);
+            }
+        }
+
+        function flipCard() {
+            if (lockBoard) return;
+            if (this.classList.contains("flipped") || this.classList.contains("matched")) return;
+
+            this.classList.add("flipped");
+            this.innerText = this.dataset.emoji;
+            flippedCards.push(this);
+
+            let limit = superPeekActive ? 3 : 2;
+
+            if (flippedCards.length === limit) {
+                checkMatch();
+            }
+        }
+
+        function checkMatch() {
+            moves++;
+            movesElement.innerText = moves;
+
+            let emojisCount = {};
+            flippedCards.forEach(card => {
+                let emoji = card.dataset.emoji;
+                emojisCount[emoji] = (emojisCount[emoji] || 0) + 1;
+            });
+
+            let matchedEmoji = null;
+            for (let emoji in emojisCount) {
+                if (emojisCount[emoji] >= 2) {
+                    matchedEmoji = emoji;
+                    break;
+                }
+            }
+
+            if (matchedEmoji) {
+                // Kaskart teisingai atspėjus kortelių porą – fono spalva sklandžiai pasikeičia!
+                changeBackgroundColor();
+
+                flippedCards.forEach(card => {
+                    if (card.dataset.emoji === matchedEmoji) {
+                        card.classList.add("matched");
+                    } else {
+                        card.classList.remove("flipped");
+                        card.innerText = "";
+                    }
+                });
+
+                flippedCards = flippedCards.filter(card => card.dataset.emoji === matchedEmoji);
+                if (flippedCards.length >= 2) {
+                    flippedCards = [];
+                    matchedPairs++;
+                    score += currentLevel * 15;
+                    scoreElement.innerText = score;
+
+                    if (superPeekActive) {
+                        superPeekActive = false;
+                        shopStatusElement.innerText = "";
+                    }
+
+                    let requiredPairs = cardsArray.length / 2;
+                    if (matchedPairs === requiredPairs) {
+                        setTimeout(() => {
+                            if (currentLevel < 8) {
+                                alert(`Nuostabu! Laimėjai ${currentLevel} lygį. Keliauji į ${currentLevel + 1} lygį!`);
+                                currentLevel++;
+                                initLevel();
+                            } else {
+                                alert(`🎉 Sveikinu! Perėjai visus 8 lygius! Galutinis rezultatas: ${score} taškų.`);
+                                restartGame();
+                            }
+                        }, 300);
+                    }
+                }
+            } else {
+                if (superPeekActive) {
+                    superPeekActive = false;
+                    shopStatusElement.innerText = "";
+                }
+
+                lockBoard = true;
+                setTimeout(() => {
+                    flippedCards.forEach(card => {
+                        card.classList.remove("flipped");
+                        card.innerText = "";
+                    });
+                    flippedCards = [];
+                    lockBoard = false;
+                }, 900);
+            }
+        }
+
+        function restartGame() {
+            currentLevel = 1;
+            score = 50;
+            scoreElement.innerText = score;
+            initLevel();
+        }
+
+        // Įvykių klausiklių prijungimas naudojant addEventListener
+        document.getElementById("restartBtn").addEventListener("click", restartGame);
+        document.getElementById("buyPeekBtn").addEventListener("click", buySuperPeek);
+
+        // Paleidžiame žaidimą puslapiui užsikrovus
+        window.addEventListener("DOMContentLoaded", () => {
+            initLevel();
+        });
+    </script>
+</body>
+</html>
